@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { runMigrations } from "./database.js";
 
-async function migrate() {
+function migrate() {
   try {
-    await runMigrations();
+    runMigrations();
     console.log("Database migrations completed successfully!");
     process.exit(0);
   } catch (error) {

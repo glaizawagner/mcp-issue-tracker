@@ -1,5 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { auth } from "./auth.js";
+import { verifyApiKey } from "./apiKey.js";
+import { getDatabase } from "./db/database.js";
 
 export interface AuthenticatedRequest extends FastifyRequest {
   user?: {
@@ -31,6 +33,46 @@ export async function authMiddleware(
   reply: FastifyReply
 ) {
   try {
+    const apiKeyHeader = request.headers["x-api-key"];
+    const apiKeyValue = Array.isArray(apiKeyHeader)
+      ? apiKeyHeader[0]
+      : apiKeyHeader;
+
+    if (apiKeyValue) {
+      const result = verifyApiKey(apiKeyValue);
+
+      if (!result) {
+        return reply.status(401).send({
+          error: "Unauthorized",
+          message: "Invalid API key",
+        });
+      }
+
+      const db = getDatabase();
+      const userRow = db.get("SELECT * FROM user WHERE id = ?", [
+        result.userId,
+      ]);
+
+      if (!userRow) {
+        return reply.status(401).send({
+          error: "Unauthorized",
+          message: "Invalid API key",
+        });
+      }
+
+      request.user = {
+        id: userRow.id,
+        email: userRow.email,
+        name: userRow.name,
+        emailVerified: !!userRow.emailVerified,
+        image: userRow.image ?? null,
+        createdAt: userRow.createdAt,
+        updatedAt: userRow.updatedAt,
+      };
+
+      return;
+    }
+
     const headers = convertHeaders(request.headers);
 
     // Get session from BetterAuth

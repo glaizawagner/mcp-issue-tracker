@@ -1,76 +1,107 @@
-import sqlite3 from "sqlite3";
-import { promisify } from "util";
+import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Enable verbose mode for debugging
-sqlite3.verbose();
-
 // Database file path - consistent with auth.ts
 const DB_PATH = path.resolve(__dirname, "..", "..", "database.sqlite");
 
-export interface Database {
-  run: (sql: string, params?: any[]) => Promise<sqlite3.RunResult>;
-  get: (sql: string, params?: any[]) => Promise<any>;
-  all: (sql: string, params?: any[]) => Promise<any[]>;
-  close: () => Promise<void>;
+export interface DatabaseInterface {
+  run: (sql: string, params?: any[]) => any;
+  get: (sql: string, params?: any[]) => any;
+  all: (sql: string, params?: any[]) => any[];
+  close: () => void;
 }
 
-export class DatabaseConnection {
-  private db: sqlite3.Database;
-  public run: (sql: string, params?: any[]) => Promise<sqlite3.RunResult>;
-  public get: (sql: string, params?: any[]) => Promise<any>;
-  public all: (sql: string, params?: any[]) => Promise<any[]>;
-  public close: () => Promise<void>;
+export class DatabaseConnection implements DatabaseInterface {
+  private db: Database.Database;
 
-  constructor(db: sqlite3.Database) {
+  constructor(db: Database.Database) {
     this.db = db;
+  }
 
-    // Properly promisify the run method to return the context (this)
-    this.run = (sql: string, params?: any[]) => {
-      return new Promise((resolve, reject) => {
-        this.db.run(sql, params || [], function (err) {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(this); // 'this' contains lastID, changes, etc.
-          }
-        });
-      });
-    };
+  run(sql: string, params?: any[]): any {
+    // If there are parameters, use prepare/run (single statement)
+    if (params && params.length > 0) {
+      const stmt = this.db.prepare(sql);
+      return stmt.run(...params);
+    }
 
-    this.get = promisify(db.get.bind(db));
-    this.all = promisify(db.all.bind(db));
-    this.close = promisify(db.close.bind(db));
+    // If the SQL contains multiple statements (indicated by semicolons between statements)
+    // use exec(), otherwise use prepare/run for safety
+    const trimmedSql = sql.trim();
+    const statementCount = (trimmedSql.match(/;/g) || []).length;
+    const hasNewlines = trimmedSql.includes("\n");
+
+    if (statementCount > 1 || (statementCount === 1 && hasNewlines)) {
+      // Multiple statements or complex statement with newlines (like triggers)
+      return this.db.exec(trimmedSql);
+    } else {
+      // Single simple statement
+      const stmt = this.db.prepare(trimmedSql);
+      return stmt.run();
+    }
+  }
+
+  get(sql: string, params?: any[]) {
+    const stmt = this.db.prepare(sql);
+    return stmt.get(...(params || []));
+  }
+
+  all(sql: string, params?: any[]) {
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...(params || []));
+  }
+
+  close() {
+    this.db.close();
   }
 }
 
-export async function createDatabase(): Promise<Database> {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) {
-        console.error("Error opening database:", err);
-        reject(err);
-      } else {
-        if (process.env.NODE_ENV !== "test") {
-          console.log("Connected to SQLite database at:", DB_PATH);
-        }
-        resolve(new DatabaseConnection(db));
-      }
-    });
-  });
+export function createDatabase(): DatabaseInterface {
+  const db = new Database(DB_PATH);
+  if (process.env.NODE_ENV !== "test") {
+    console.log("Connected to SQLite database at:", DB_PATH);
+  }
+  return new DatabaseConnection(db);
 }
 
-export async function runMigrations(): Promise<void> {
-  const db = await createDatabase();
+export function runMigrations(): void {
+  const db = createDatabase();
 
   try {
     // Enable foreign keys
-    await db.run("PRAGMA foreign_keys = ON");
+    db.run("PRAGMA foreign_keys = ON");
 
+    // First, load BetterAuth migrations if they exist
+    const betterAuthMigrationsDir = path.join(
+      __dirname,
+      "..",
+      "..",
+      "better-auth_migrations"
+    );
+    if (fs.existsSync(betterAuthMigrationsDir)) {
+      const betterAuthFiles = fs
+        .readdirSync(betterAuthMigrationsDir)
+        .filter((file) => file.endsWith(".sql"))
+        .sort();
+
+      for (const file of betterAuthFiles) {
+        const filePath = path.join(betterAuthMigrationsDir, file);
+        const sql = fs.readFileSync(filePath, "utf8").trim();
+
+        if (sql) {
+          if (process.env.NODE_ENV !== "test") {
+            console.log(`Running BetterAuth migration: ${file}`);
+          }
+          db.run(sql);
+        }
+      }
+    }
+
+    // Then load custom migrations
     const migrationsDir = path.join(__dirname, "migrations");
     const migrationFiles = fs
       .readdirSync(migrationsDir)
@@ -83,12 +114,20 @@ export async function runMigrations(): Promise<void> {
 
     for (const file of migrationFiles) {
       const filePath = path.join(migrationsDir, file);
-      const sql = fs.readFileSync(filePath, "utf8");
+      const sql = fs.readFileSync(filePath, "utf8").trim();
+
+      // Skip empty migration files
+      if (!sql) {
+        if (process.env.NODE_ENV !== "test") {
+          console.log(`Skipping empty migration: ${file}`);
+        }
+        continue;
+      }
 
       if (process.env.NODE_ENV !== "test") {
         console.log(`Running migration: ${file}`);
       }
-      await db.run(sql);
+      db.run(sql);
     }
 
     if (process.env.NODE_ENV !== "test") {
@@ -98,21 +137,21 @@ export async function runMigrations(): Promise<void> {
     console.error("Error running migrations:", error);
     throw error;
   } finally {
-    await db.close();
+    db.close();
   }
 }
 
-export async function getDatabase(): Promise<Database> {
+export function getDatabase(): DatabaseInterface {
   // Use test database if we're in test environment
   if (process.env.NODE_ENV === "test") {
-    const { testDb } = await import("../tests/setup.js");
+    const { testDb } = require("../tests/setup.js");
     // Enable foreign keys for test database
-    await testDb.run("PRAGMA foreign_keys = ON");
+    testDb.run("PRAGMA foreign_keys = ON");
     return testDb;
   }
 
-  const db = await createDatabase();
+  const db = createDatabase();
   // Enable foreign keys for this connection
-  await db.run("PRAGMA foreign_keys = ON");
+  db.run("PRAGMA foreign_keys = ON");
   return db;
 }

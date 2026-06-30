@@ -7,7 +7,7 @@ export function useApiCall<T>() {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const { toast } = useToast();
+  const toast = useToast();
 
   const execute = useCallback(
     async (
@@ -18,7 +18,7 @@ export function useApiCall<T>() {
         showSuccessToast?: boolean;
         showErrorToast?: boolean;
         successMessage?: string;
-      }
+      },
     ) => {
       try {
         setLoading(true);
@@ -56,7 +56,7 @@ export function useApiCall<T>() {
         setLoading(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   const reset = useCallback(() => {
@@ -76,8 +76,15 @@ export function useApiCall<T>() {
 
 // Hook specifically for paginated data
 export function usePaginatedApiCall<T>() {
+  type Pagination = {
+    page: number;
+    totalPages: number;
+    totalItems: number;
+    limit: number;
+  };
+
   const [data, setData] = useState<T[]>([]);
-  const [pagination, setPagination] = useState({
+  const [pagination, setPagination] = useState<Pagination>({
     page: 1,
     totalPages: 1,
     totalItems: 0,
@@ -85,17 +92,17 @@ export function usePaginatedApiCall<T>() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const { toast } = useToast();
+  const toast = useToast();
 
   const execute = useCallback(
     async (
-      apiCall: () => Promise<{ data: T[]; pagination: typeof pagination }>,
+      apiCall: () => Promise<{ data: T[]; pagination: Pagination }>,
       options?: {
         append?: boolean;
-        onSuccess?: (data: T[], pagination: typeof pagination) => void;
+        onSuccess?: (data: T[], pagination: Pagination) => void;
         onError?: (error: ApiError) => void;
         showErrorToast?: boolean;
-      }
+      },
     ) => {
       try {
         setLoading(true);
@@ -136,7 +143,7 @@ export function usePaginatedApiCall<T>() {
         setLoading(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   const reset = useCallback(() => {
@@ -147,12 +154,12 @@ export function usePaginatedApiCall<T>() {
   }, []);
 
   const loadMore = useCallback(
-    (apiCall: () => Promise<{ data: T[]; pagination: typeof pagination }>) => {
+    (apiCall: () => Promise<{ data: T[]; pagination: Pagination }>) => {
       if (pagination.page < pagination.totalPages && !loading) {
         return execute(apiCall, { append: true });
       }
     },
-    [execute, pagination, loading]
+    [execute, pagination, loading],
   );
 
   return {
@@ -171,7 +178,7 @@ export function usePaginatedApiCall<T>() {
 export function useApiForm<T, U>() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const { toast } = useToast();
+  const toast = useToast();
 
   const submit = useCallback(
     async (
@@ -182,7 +189,7 @@ export function useApiForm<T, U>() {
         onError?: (error: ApiError) => void;
         successMessage?: string;
         resetForm?: () => void;
-      }
+      },
     ) => {
       try {
         setSubmitting(true);
@@ -221,7 +228,7 @@ export function useApiForm<T, U>() {
         setSubmitting(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   const clearError = useCallback(() => {
@@ -240,7 +247,7 @@ export function useApiForm<T, U>() {
 export function useOptimisticUpdate<T>() {
   const [optimisticData, setOptimisticData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+  const toast = useToast();
 
   const executeWithOptimisticUpdate = useCallback(
     async (
@@ -251,7 +258,7 @@ export function useOptimisticUpdate<T>() {
         onSuccess?: (data: T) => void;
         onError?: (error: ApiError) => void;
         successMessage?: string;
-      }
+      },
     ) => {
       try {
         // Apply optimistic update immediately
@@ -294,7 +301,7 @@ export function useOptimisticUpdate<T>() {
         setLoading(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   return {

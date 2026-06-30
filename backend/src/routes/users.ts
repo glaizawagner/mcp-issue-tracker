@@ -36,16 +36,14 @@ const usersRoute: FastifyPluginAsync = async function (fastify) {
   // GET /api/users - Get all users (for assignment dropdown)
   fastify.get("/", async function (request, reply) {
     try {
-      const db = await getDatabase();
+      const db = getDatabase();
 
       // Get users from the BetterAuth user table
-      const users = await db.all(`
+      const users = db.all(`
         SELECT id, name, email, emailVerified, image, createdAt, updatedAt 
         FROM user 
         ORDER BY name ASC
       `);
-
-      await db.close();
 
       return {
         success: true,
@@ -53,7 +51,7 @@ const usersRoute: FastifyPluginAsync = async function (fastify) {
         count: users.length,
       };
     } catch (error) {
-      fastify.log.error("Error fetching users:", error);
+      fastify.log.error({ err: error }, "Error fetching users");
       return reply.status(500).send({
         success: false,
         error: "Failed to fetch users",
@@ -69,9 +67,9 @@ const usersRoute: FastifyPluginAsync = async function (fastify) {
       try {
         const { id } = request.params;
 
-        const db = await getDatabase();
+        const db = getDatabase();
 
-        const user = await db.get(
+        const user = db.get(
           `
         SELECT id, name, email, emailVerified, image, createdAt, updatedAt 
         FROM user 
@@ -79,8 +77,6 @@ const usersRoute: FastifyPluginAsync = async function (fastify) {
       `,
           [id]
         );
-
-        await db.close();
 
         if (!user) {
           return reply.status(404).send({
@@ -95,7 +91,7 @@ const usersRoute: FastifyPluginAsync = async function (fastify) {
           data: user,
         };
       } catch (error) {
-        fastify.log.error("Error fetching user:", error);
+        fastify.log.error({ err: error }, "Error fetching user");
         return reply.status(500).send({
           success: false,
           error: "Failed to fetch user",

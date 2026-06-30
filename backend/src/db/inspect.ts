@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { getDatabase } from "./database.js";
 
-async function inspectDatabase() {
-  const db = await getDatabase();
+function inspectDatabase() {
+  const db = getDatabase();
 
   try {
     console.log("=== DATABASE INSPECTION ===\n");
 
     // Check users
-    const users = await db.all(
+    const users = db.all(
       "SELECT id, email, name, createdAt FROM user ORDER BY id"
     );
     console.log(`Users (${users.length}):`);
@@ -17,14 +17,14 @@ async function inspectDatabase() {
     });
 
     // Check tags
-    const tags = await db.all("SELECT id, name, color FROM tags ORDER BY id");
+    const tags = db.all("SELECT id, name, color FROM tags ORDER BY id");
     console.log(`\nTags (${tags.length}):`);
     tags.forEach((tag) => {
       console.log(`  ${tag.id}: ${tag.name} (${tag.color})`);
     });
 
     // Check issues with related data
-    const issues = await db.all(`
+    const issues = db.all(`
       SELECT 
         i.id,
         i.title,
@@ -53,7 +53,7 @@ async function inspectDatabase() {
   } catch (error) {
     console.error("Error inspecting database:", error);
   } finally {
-    await db.close();
+    db.close();
   }
 }
 

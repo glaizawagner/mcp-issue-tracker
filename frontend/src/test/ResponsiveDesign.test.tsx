@@ -13,27 +13,27 @@ const mockIssue = {
   priority: 'high' as const,
   assigned_user_id: 'user-1',
   created_by_user_id: 'user-2',
-  createdAt: '2024-01-01T00:00:00Z',
-  updatedAt: '2024-01-01T00:00:00Z',
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
   assigned_user: {
     id: 'user-1',
     name: 'John Doe',
     email: 'john@example.com',
     emailVerified: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z'
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z'
   },
   created_by_user: {
     id: 'user-2',
     name: 'Jane Smith',
     email: 'jane@example.com',
     emailVerified: true,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z'
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z'
   },
   tags: [
-    { id: 1, name: 'frontend', color: '#3b82f6', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-    { id: 2, name: 'urgent', color: '#ef4444', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' }
+    { id: 1, name: 'frontend', color: '#3b82f6', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
+    { id: 2, name: 'urgent', color: '#ef4444', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' }
   ]
 };
 

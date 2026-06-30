@@ -1,41 +1,79 @@
 #!/usr/bin/env node
+import crypto from "crypto";
+import { hashPassword } from "better-auth/crypto";
 import { getDatabase } from "./database.js";
 
 async function seedDatabase() {
-  const db = await getDatabase();
+  const db = getDatabase();
 
   try {
     console.log("Seeding database with sample data...");
 
     // Clear existing data (in reverse order due to foreign keys)
-    await db.run("DELETE FROM issue_tags");
-    await db.run("DELETE FROM issues");
-    await db.run("DELETE FROM tags");
-    await db.run("DELETE FROM session");
-    await db.run("DELETE FROM account");
-    await db.run("DELETE FROM verification");
-    await db.run("DELETE FROM user");
+    db.run("DELETE FROM issue_tags");
+    db.run("DELETE FROM issues");
+    db.run("DELETE FROM tags");
+    db.run("DELETE FROM session");
+    db.run("DELETE FROM account");
+    db.run("DELETE FROM verification");
+    db.run("DELETE FROM user");
 
     // Reset auto-increment counters
-    await db.run(
-      'DELETE FROM sqlite_sequence WHERE name IN ("issues", "tags")'
+    db.run(
+      "DELETE FROM sqlite_sequence WHERE name IN ('issues', 'tags')"
     );
 
     // Create sample users in BetterAuth user table
     const users = [
-      { id: "john123", email: "john@example.com", name: "John Doe" },
-      { id: "jane456", email: "jane@example.com", name: "Jane Smith" },
-      { id: "admin789", email: "admin@example.com", name: "Admin User" },
-      { id: "dev101", email: "dev@example.com", name: "Developer" },
+      {
+        id: "john123",
+        email: "john@example.com",
+        name: "John Doe",
+        password: "password123",
+      },
+      {
+        id: "jane456",
+        email: "jane@example.com",
+        name: "Jane Smith",
+        password: "password123",
+      },
+      {
+        id: "admin789",
+        email: "admin@example.com",
+        name: "Admin User",
+        password: "admin123",
+      },
+      {
+        id: "dev101",
+        email: "dev@example.com",
+        name: "Developer",
+        password: "dev123",
+      },
     ];
 
     const userIds: string[] = [];
     for (const user of users) {
       const now = new Date().toISOString();
-      await db.run(
+      db.run(
         "INSERT INTO user (id, email, name, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
         [user.id, user.email, user.name, 0, now, now]
       );
+
+      // Create the BetterAuth credential account so the user can sign in with a password
+      const passwordHash = await hashPassword(user.password);
+      db.run(
+        "INSERT INTO account (id, accountId, providerId, userId, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+          crypto.randomUUID(),
+          user.id,
+          "credential",
+          user.id,
+          passwordHash,
+          now,
+          now,
+        ]
+      );
+
       userIds.push(user.id);
       console.log(`Created user: ${user.name} (${user.email})`);
     }
@@ -52,11 +90,11 @@ async function seedDatabase() {
 
     const tagIds: number[] = [];
     for (const tag of tags) {
-      const result = await db.run(
+      const result = db.run(
         "INSERT INTO tags (name, color) VALUES (?, ?)",
         [tag.name, tag.color]
       );
-      tagIds.push(result.lastID as number);
+      tagIds.push(result.lastInsertRowid as number);
       console.log(`Created tag: ${tag.name}`);
     }
 
@@ -119,7 +157,7 @@ async function seedDatabase() {
     ];
 
     for (const issue of issues) {
-      const result = await db.run(
+      const result = db.run(
         "INSERT INTO issues (title, description, status, assigned_user_id, created_by_user_id) VALUES (?, ?, ?, ?, ?)",
         [
           issue.title,
@@ -130,12 +168,12 @@ async function seedDatabase() {
         ]
       );
 
-      const issueId = result.lastID as number;
+      const issueId = result.lastInsertRowid as number;
       console.log(`Created issue: ${issue.title}`);
 
       // Add tags to the issue
       for (const tagId of issue.tags) {
-        await db.run(
+        db.run(
           "INSERT INTO issue_tags (issue_id, tag_id) VALUES (?, ?)",
           [issueId, tagId]
         );
@@ -152,7 +190,7 @@ async function seedDatabase() {
     console.error("Error seeding database:", error);
     throw error;
   } finally {
-    await db.close();
+    db.close();
   }
 }
 

@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { auth } from "./auth.js";
+import { generateApiKey } from "./apiKey.js";
 import usersRoute from "./routes/users.js";
 import tagsRoute from "./routes/tags.js";
 import issuesRoute from "./routes/issues.js";
@@ -35,7 +36,7 @@ export async function buildApp(
   // Register BetterAuth routes with custom sign-up handling
   fastify.register(
     async function (fastify) {
-      // Custom sign-up endpoint that creates API key after user creation
+      // Custom sign-up endpoint that forwards to Better Auth
       fastify.post("/sign-up/email", async (request, reply) => {
         try {
           // First, create the user through Better Auth
@@ -53,65 +54,12 @@ export async function buildApp(
           const authResponse = await auth.handler(authRequest);
           const responseText = await authResponse.text();
 
-          if (authResponse.ok) {
-            // Parse the response to get user data
-            const userData = JSON.parse(responseText);
-
-            // Create API key for the new user
-            try {
-              const apiKeyResult = await auth.api.createApiKey({
-                body: {
-                  name: `${userData.user.name}'s API Key`,
-                  userId: userData.user.id,
-                  metadata: {
-                    createdAt: new Date().toISOString(),
-                    purpose: "default",
-                  },
-                },
-              });
-
-              console.log(
-                `API key created for user ${userData.user.name}: ${apiKeyResult?.start || "created"}`
-              );
-
-              // Optionally include API key info in response (be careful with security)
-              const enhancedResponse = {
-                ...userData,
-                apiKey: {
-                  id: apiKeyResult.id,
-                  name: apiKeyResult.name,
-                  key: apiKeyResult.key, // Include the full API key for the user
-                  start: apiKeyResult.start,
-                  created: true,
-                },
-              };
-
-              reply.status(authResponse.status);
-              authResponse.headers.forEach((value, key) => {
-                reply.header(key, value);
-              });
-
-              reply.send(enhancedResponse);
-            } catch (error) {
-              console.error(
-                `Failed to create API key for user ${userData.user.name}:`,
-                error
-              );
-              // Still return successful auth response even if API key creation fails
-              reply.status(authResponse.status);
-              authResponse.headers.forEach((value, key) => {
-                reply.header(key, value);
-              });
-              reply.send(responseText);
-            }
-          } else {
-            // Forward failed auth response as-is
-            reply.status(authResponse.status);
-            authResponse.headers.forEach((value, key) => {
-              reply.header(key, value);
-            });
-            reply.send(responseText);
-          }
+          // Forward Better Auth response as-is
+          reply.status(authResponse.status);
+          authResponse.headers.forEach((value, key) => {
+            reply.header(key, value);
+          });
+          reply.send(responseText);
         } catch (error) {
           console.error("Custom sign-up error:", error);
           reply.status(500).send({
@@ -122,93 +70,32 @@ export async function buildApp(
         }
       });
 
-      // Custom endpoint to generate a new API key (invalidates existing ones)
+      // Issue a new API key for the currently signed-in user (session cookie required)
       fastify.post("/generate-api-key", async (request, reply) => {
-        try {
-          // Get the session to verify user is authenticated
-          const authRequest = new Request(
-            `http://localhost:3000/api/auth/get-session`,
-            {
-              method: "GET",
-              headers: {
-                cookie: request.headers.cookie || "",
-              },
-            }
-          );
-
-          const sessionResponse = await auth.handler(authRequest);
-          const sessionData = await sessionResponse.json();
-
-          if (!sessionResponse.ok || !sessionData.user) {
-            reply.status(401).send({
-              error: "Unauthorized",
-              code: "UNAUTHORIZED",
-            });
-            return;
-          }
-
-          const userId = sessionData.user.id;
-
-          // First, get existing API keys for this user
-          const existingKeys = await auth.api.listApiKeys({
-            headers: {
-              cookie: request.headers.cookie || "",
-            },
-          });
-
-          // Delete all existing API keys for this user
-          if (existingKeys && Array.isArray(existingKeys)) {
-            for (const key of existingKeys) {
-              try {
-                await auth.api.deleteApiKey({
-                  body: { keyId: key.id },
-                  headers: {
-                    cookie: request.headers.cookie || "",
-                  },
-                });
-              } catch (deleteError) {
-                console.error(
-                  `Failed to delete API key ${key.id}:`,
-                  deleteError
-                );
-              }
+        const headers = new Headers();
+        Object.entries(request.headers).forEach(([key, value]) => {
+          if (value) {
+            const headerValue = Array.isArray(value) ? value[0] : value;
+            if (typeof headerValue === "string") {
+              headers.set(key, headerValue);
             }
           }
+        });
 
-          // Create a new API key
-          const apiKeyResult = await auth.api.createApiKey({
-            body: {
-              name: `${sessionData.user.name}'s API Key`,
-              userId: userId,
-              metadata: {
-                createdAt: new Date().toISOString(),
-                purpose: "regenerated",
-              },
-            },
-          });
+        const session = await auth.api.getSession({ headers });
 
-          console.log(
-            `New API key generated for user ${sessionData.user.name}: ${apiKeyResult?.start || "created"}`
-          );
-
-          reply.send({
-            success: true,
-            apiKey: {
-              id: apiKeyResult.id,
-              name: apiKeyResult.name,
-              key: apiKeyResult.key,
-              start: apiKeyResult.start,
-              created: true,
-            },
-          });
-        } catch (error) {
-          console.error("Generate API key error:", error);
-          reply.status(500).send({
-            error: "Failed to generate API key",
-            code: "API_KEY_GENERATION_ERROR",
-            details: error instanceof Error ? error.message : "Unknown error",
+        if (!session?.user) {
+          return reply.status(401).send({
+            error: "Unauthorized",
+            message: "Authentication required",
           });
         }
+
+        const name =
+          (request.body as { name?: string } | undefined)?.name ?? undefined;
+        const result = generateApiKey(session.user.id, name);
+
+        reply.send({ success: true, apiKey: result });
       });
 
       // Handle all other auth routes normally

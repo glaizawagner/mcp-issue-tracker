@@ -88,7 +88,7 @@ export const createTestTag = async (tagData = {}) => {
     [tag.name, tag.color]
   );
 
-  return { ...tag, id: result.lastID };
+  return { ...tag, id: Number(result.lastInsertRowid) };
 };
 
 export const createTestIssue = async (issueData: any = {}) => {
@@ -102,7 +102,7 @@ export const createTestIssue = async (issueData: any = {}) => {
   const defaultIssue = {
     title: "Test Issue",
     description: "Test Description",
-    status: "not_started",
+    status: "open",
     priority: "medium",
     assigned_user_id: null,
     created_by_user_id: userId,
@@ -122,7 +122,7 @@ export const createTestIssue = async (issueData: any = {}) => {
     ]
   );
 
-  return { ...issue, id: result.lastID };
+  return { ...issue, id: Number(result.lastInsertRowid) };
 };
 
 export const mockAuthenticatedRequest = (

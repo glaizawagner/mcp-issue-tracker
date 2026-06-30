@@ -10,6 +10,16 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 // Create axios instance with default config
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -28,7 +38,7 @@ api.interceptors.response.use(
       console.error("Unauthorized - redirecting to login");
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 // Auth API
@@ -101,7 +111,7 @@ export const tagsApi = {
 // Issues API
 export const issuesApi = {
   getIssues: async (
-    filters?: IssueFilters
+    filters?: IssueFilters,
   ): Promise<PaginatedResponse<Issue>> => {
     const response = await api.get("/issues", { params: filters });
     return response.data;
@@ -133,7 +143,7 @@ export const issuesApi = {
       priority: string;
       assigned_user_id?: string;
       tag_ids?: number[];
-    }>
+    }>,
   ): Promise<ApiResponse<Issue>> => {
     const response = await api.put(`/issues/${id}`, data);
     return response.data;
